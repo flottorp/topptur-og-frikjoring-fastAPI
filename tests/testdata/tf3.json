@@ -1,0 +1,38 @@
+[
+  {
+    "billing": {
+      "first_name": "Jonas",
+      "last_name": "Fjell",
+      "email": "jonas.fjell@test.no",
+      "phone": "+4791110001"
+    },
+    "date_paid": "2025-01-15T10:12:00"
+  },
+  {
+    "billing": {
+      "first_name": "Maja",
+      "last_name": "Skar",
+      "email": "maja.skar@test.no",
+      "phone": "+4791110004"
+    },
+    "date_paid": "2025-01-16T14:30:00"
+  },
+  {
+    "billing": {
+      "first_name": "Kari",
+      "last_name": "Snø",
+      "email": "kari.sno@test.no",
+      "phone": "+4791110002"
+    },
+    "date_paid": "2025-02-01T09:00:00"
+  },
+  {
+    "billing": {
+      "first_name": "Erik",
+      "last_name": "Isbre",
+      "email": "erik.isbre@test.no",
+      "phone": "+4791110005"
+    },
+    "date_paid": "2025-03-10T16:45:00"
+  }
+]

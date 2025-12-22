@@ -1,0 +1,26 @@
+[
+  {
+    "first_name": "Jonas",
+    "last_name": "Fjell",
+    "phone_number": "+4791110001",
+    "email": "jonas.fjell@test.no",
+    "has_valid_group_membership": true,
+    "ntnui_contract_expiry_date": "2026-01-31"
+  },
+  {
+    "first_name": "Kari",
+    "last_name": "Snø",
+    "phone_number": "+4791110002",
+    "email": "kari.sno@test.no",
+    "has_valid_group_membership": false,
+    "ntnui_contract_expiry_date": null
+  },
+  {
+    "first_name": "Lars",
+    "last_name": "Rygg",
+    "phone_number": "+4791110003",
+    "email": "lars.rygg@test.no",
+    "has_valid_group_membership": true,
+    "ntnui_contract_expiry_date": "2025-12-31"
+  }
+]
