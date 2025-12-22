@@ -26,11 +26,11 @@ def get_member(telephone_number: str, db: Session = Depends(get_db)):
 
 
 @router.post("/")
-def create_member(name: str, email: str, telephone_number: str = None, tf_fee: bool = False, ntnui_tf_member: bool = False, db: Session = Depends(get_db)):
+def create_member(name: str, email: str, telephone_number: str = None, tf_valid: bool = False, tf_valid_until: str = None, ntnui_valid: bool = False, ntnui_valid_until: str = None, db: Session = Depends(get_db)):
     """Create a new member"""
     service = MemberSyncService(db)
     try:
-        member = service.create_member(name=name, email=email, telephone_number=telephone_number, tf_fee=tf_fee, ntnui_tf_member=ntnui_tf_member)
+        member = service.create_member(name=name, email=email, telephone_number=telephone_number, tf_valid=tf_valid, tf_valid_until=tf_valid_until, ntnui_valid=ntnui_valid, ntnui_valid_until=ntnui_valid_until)
         return {"status": "success", "member": member}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
