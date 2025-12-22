@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.member import Member
 from app.services.sync_members import MemberSyncService
+from typing import List, Dict
 
 router = APIRouter(prefix="/api/members", tags=["members"])
 
@@ -37,8 +38,36 @@ def create_member(name: str, email: str, telephone_number: str = None, tf_valid:
 
 
 @router.post("/sync")
-def sync_members(db: Session = Depends(get_db)):
-    """Sync members from external API"""
+def sync_members(
+    tf_data: List[Dict] = Body(None),
+    ntnui_data: List[Dict] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Sync members from external API or provided JSON data
+    
+    Body should contain:
+    - tf_data: List of TF member data (optional)
+    - ntnui_data: List of NTNUI member data (optional)
+    """
     service = MemberSyncService(db)
-    result = service.sync_members_from_external()
+    result = service.sync_members_from_external(tf_data=tf_data, ntnui_data=ntnui_data)
     return result
+
+
+@router.delete("/reset")
+def reset_members(db: Session = Depends(get_db)):
+    """
+    Reset the members database by deleting all members
+    WARNING: This will delete all member data!
+    """
+    try:
+        deleted_count = db.query(Member).delete()
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Database reset completed. {deleted_count} members deleted."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error resetting database: {str(e)}")
