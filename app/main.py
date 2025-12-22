@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.api import membership
 from app.models.member import Base
-from app.db.database import engine
+from app.db.database import DATABASE_URL, engine
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -39,4 +39,5 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    print("DATABASE_URL =", DATABASE_URL)
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

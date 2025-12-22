@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -9,21 +9,21 @@ class Member(Base):
     __tablename__ = "members"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    email = Column(String, unique=True, index=True)
-    phone = Column(String, nullable=True)
-    membership_status = Column(String, default="active")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    tf_fee = Column(Integer, nullable=False)
+    ntnui_tf_member = Column(Boolean, nullable=False)
+    last_synced = Column(DateTime, default=datetime.utcnow)
+    
 
 
 class MemberSchema:
     """Pydantic schema for member API responses"""
     
-    def __init__(self, id: int, name: str, email: str, phone: str = None, 
-                 membership_status: str = "active"):
+    def __init__(self, id: int, name: str, email: str, tf_fee: int, ntnui_tf_member: bool, last_synced: datetime):
         self.id = id
         self.name = name
         self.email = email
-        self.phone = phone
-        self.membership_status = membership_status
+        self.tf_fee = tf_fee
+        self.ntnui_tf_member = ntnui_tf_member
+        self.last_synced = last_synced

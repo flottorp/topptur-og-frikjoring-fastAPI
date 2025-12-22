@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 # Database URL - adjust based on your PostgreSQL setup
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://user:password@localhost/topptur_frikjoring"
 )
 
 engine = create_engine(DATABASE_URL, echo=False)
