@@ -4,3 +4,23 @@ exampledata.csv
 daily-sync.yaml
 tfapiexempeldata.json
 ntnuiexempeldata.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
