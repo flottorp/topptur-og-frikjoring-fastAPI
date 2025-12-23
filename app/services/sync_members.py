@@ -1,7 +1,9 @@
 import logging
+import asyncio
 from sqlalchemy.orm import Session
 from app.models.member import Member
-from app.services.external_apis import ExternalAPIClient
+from app.services.external_tfshopAPI import TFShopAPIClient
+from app.services.external_ntnuiAPI import NTNUIAPIClient
 from datetime import datetime, date
 from typing import List, Dict, Optional
 
@@ -11,83 +13,106 @@ logger = logging.getLogger(__name__)
 class MemberSyncService:
     """Service for syncing members from external sources"""
     
-    def __init__(self, db: Session, external_api_client: ExternalAPIClient = None):
+    def __init__(self, db: Session):
         self.db = db
-        self.external_api = external_api_client
+        self.tf_client = TFShopAPIClient()
+        self.ntnui_client = NTNUIAPIClient()
     
-    def sync_members_from_external(self, tf_data: List[Dict] = None, ntnui_data: List[Dict] = None) -> dict:
+    async def sync_members_from_external(self, tf_data: List[Dict] = None, ntnui_data: List[Dict] = None) -> dict:
         """
-        Sync members from external API or provided data
+        Sync members from external APIs or provided data
         
         Args:
-            tf_data: List of TF member data (optional, for testing)
-            ntnui_data: List of NTNUI member data (optional, for testing)
+            tf_data: List of TF member data (optional, for testing - skips API call)
+            ntnui_data: List of NTNUI member data (optional, for testing - skips API call)
         
         Returns:
             dict: Sync result with status and count
         """
         try:
-            logger.info("Starting member sync from external API")
+            logger.info("Starting member sync from external APIs")
             
-            # Merge data from both sources
+            # Fetch data from both APIs in parallel (if not provided for testing)
+            if tf_data is None or ntnui_data is None:
+                logger.info("Fetching data from external APIs in parallel...")
+                
+                # Run both API calls concurrently
+                tf_task = self.tf_client.get_members() if tf_data is None else None
+                ntnui_task = self.ntnui_client.get_members() if ntnui_data is None else None
+                
+                tasks = []
+                if tf_task:
+                    tasks.append(tf_task)
+                if ntnui_task:
+                    tasks.append(ntnui_task)
+                
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    result_index = 0
+                    if tf_data is None:
+                        if isinstance(results[result_index], Exception):
+                            logger.error(f"TF Shop API error: {results[result_index]}")
+                            tf_data = []
+                        else:
+                            tf_data = results[result_index]
+                        result_index += 1
+                    
+                    if ntnui_data is None:
+                        if isinstance(results[result_index], Exception):
+                            logger.error(f"NTNUI API error: {results[result_index]}")
+                            ntnui_data = []
+                        else:
+                            ntnui_data = results[result_index]
+            
+            # Ensure we have data lists
+            tf_data = tf_data or []
+            ntnui_data = ntnui_data or []
+            
+            logger.info(f"Processing {len(tf_data)} TF members and {len(ntnui_data)} NTNUI members")
+            
+            # Merge data from both sources by phone number
             members_dict = {}
             
             # Process TF data
-            if tf_data:
-                for entry in tf_data:
-                    billing = entry.get("billing", {})
-                    phone = billing.get("phone")
-                    if phone:
-                        date_paid = entry.get("date_paid")
-                        tf_valid_until = None
-                        
-                        if date_paid:
-                            # Parse date and calculate expiry (1 year from payment)
-                            try:
-                                paid_date = datetime.fromisoformat(date_paid.replace('Z', '+00:00'))
-                                # Set expiry to end of year after payment
-                                tf_valid_until = date(paid_date.year + 1, 12, 31)
-                            except:
-                                logger.warning(f"Could not parse date_paid: {date_paid}")
-                        
+            for entry in tf_data:
+                phone = entry.get("phone")
+                if phone:
+                    members_dict[phone] = {
+                        "telephone_number": phone,
+                        "name": f"{entry.get('first_name', '')} {entry.get('last_name', '')}".strip(),
+                        "email": entry.get("email", ""),
+                        "tf_valid_until": entry.get("tf_valid_until"),
+                        "ntnui_valid_until": None
+                    }
+            
+            # Process NTNUI data - merge with existing or create new
+            for entry in ntnui_data:
+                phone = entry.get("phone")
+                if phone:
+                    if phone in members_dict:
+                        # Update existing entry with NTNUI data
+                        members_dict[phone]["ntnui_valid_until"] = entry.get("ntnui_valid_until")
+                        # Update name/email if not present from TF
+                        if not members_dict[phone]["name"]:
+                            members_dict[phone]["name"] = f"{entry.get('first_name', '')} {entry.get('last_name', '')}".strip()
+                        if not members_dict[phone]["email"]:
+                            members_dict[phone]["email"] = entry.get("email", "")
+                    else:
+                        # Create new entry from NTNUI data
                         members_dict[phone] = {
                             "telephone_number": phone,
-                            "name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
-                            "email": billing.get("email"),
-                            "tf_valid_until": tf_valid_until,
-                            "ntnui_valid_until": None
+                            "name": f"{entry.get('first_name', '')} {entry.get('last_name', '')}".strip(),
+                            "email": entry.get("email", ""),
+                            "tf_valid_until": None,
+                            "ntnui_valid_until": entry.get("ntnui_valid_until")
                         }
-            
-            # Process NTNUI data
-            if ntnui_data:
-                for entry in ntnui_data:
-                    phone = entry.get("phone_number")
-                    if phone:
-                        ntnui_valid_until = None
-                        expiry = entry.get("ntnui_contract_expiry_date")
-                        
-                        if expiry:
-                            try:
-                                ntnui_valid_until = datetime.strptime(expiry, "%Y-%m-%d").date()
-                            except:
-                                logger.warning(f"Could not parse ntnui_contract_expiry_date: {expiry}")
-                        
-                        if phone in members_dict:
-                            # Update existing entry
-                            members_dict[phone]["ntnui_valid_until"] = ntnui_valid_until
-                        else:
-                            # Create new entry
-                            members_dict[phone] = {
-                                "telephone_number": phone,
-                                "name": f"{entry.get('first_name', '')} {entry.get('last_name', '')}".strip(),
-                                "email": entry.get("email"),
-                                "tf_valid_until": None,
-                                "ntnui_valid_until": ntnui_valid_until
-                            }
             
             # Calculate validity and sync to database
             today = date.today()
             synced_count = 0
+            updated_count = 0
+            created_count = 0
             
             for phone, member_data in members_dict.items():
                 tf_valid_until = member_data.get("tf_valid_until")
@@ -109,7 +134,8 @@ class MemberSyncService:
                     existing_member.ntnui_valid = ntnui_valid
                     existing_member.ntnui_valid_until = ntnui_valid_until
                     existing_member.last_synced = datetime.utcnow()
-                    logger.info(f"Updated member: {phone}")
+                    updated_count += 1
+                    logger.debug(f"Updated member: {phone}")
                 else:
                     # Create new member
                     self.create_member(
@@ -121,19 +147,24 @@ class MemberSyncService:
                         ntnui_valid=ntnui_valid,
                         ntnui_valid_until=ntnui_valid_until
                     )
-                    logger.info(f"Created new member: {phone}")
+                    created_count += 1
+                    logger.debug(f"Created new member: {phone}")
                 
                 synced_count += 1
             
             self.db.commit()
             
+            logger.info(f"Sync complete: {synced_count} total, {created_count} created, {updated_count} updated")
+            
             return {
                 "status": "success",
                 "synced_count": synced_count,
-                "message": f"Member sync completed. {synced_count} members synced."
+                "created_count": created_count,
+                "updated_count": updated_count,
+                "message": f"Member sync completed. {synced_count} members synced ({created_count} created, {updated_count} updated)."
             }
         except Exception as e:
-            logger.error(f"Error syncing members: {e}")
+            logger.error(f"Error syncing members: {e}", exc_info=True)
             self.db.rollback()
             return {
                 "status": "error",

@@ -7,6 +7,7 @@ Usage: python sync_cli.py --tf tests/testdata/tf1.json --ntnui tests/testdata/nt
 import argparse
 import json
 import sys
+import asyncio
 from pathlib import Path
 
 # Add app to path
@@ -55,11 +56,13 @@ def main():
         # Run sync
         print("Starting member sync...")
         service = MemberSyncService(db)
-        result = service.sync_members_from_external(tf_data=tf_data, ntnui_data=ntnui_data)
+        result = asyncio.run(service.sync_members_from_external(tf_data=tf_data, ntnui_data=ntnui_data))
         
         # Print results
         print(f"\nSync Status: {result['status']}")
         print(f"Members Synced: {result.get('synced_count', 0)}")
+        print(f"Created: {result.get('created_count', 0)}")
+        print(f"Updated: {result.get('updated_count', 0)}")
         print(f"Message: {result['message']}")
         
         if result['status'] == 'success':

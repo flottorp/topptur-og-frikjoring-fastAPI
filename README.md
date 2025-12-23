@@ -6,17 +6,20 @@ A FastAPI application for managing members and synchronizing member data from ex
 
 ```
 app/
-├── main.py                 # Application entry point
+├── main.py                     # Application entry point
 ├── api/
-│   └── membership.py       # Member API endpoints
+│   └── membership.py           # Member API endpoints
 ├── services/
-│   ├── sync_members.py     # Member synchronization service
-│   └── external_apis.py    # External API client
+│   ├── sync_members.py         # Member synchronization orchestrator
+│   ├── external_tfshopAPI.py   # TF Shop WooCommerce API client
+│   └── external_ntnuiAPI.py    # NTNUI API client
+├── core/
+│   └── security.py             # API key authentication
 ├── db/
-│   └── database.py         # Database configuration
+│   └── database.py             # Database configuration
 ├── models/
-│   └── member.py           # SQLAlchemy models and schemas
-└── requirements.txt        # Python dependencies
+│   └── member.py               # SQLAlchemy models and schemas
+└── requirements.txt            # Python dependencies
 ```
 
 ## Requirements
@@ -71,8 +74,12 @@ DATABASE_URL=postgresql://username:password@localhost:5432/topptur_frikjoring
 fastapi_key_superuser=your-secure-superuser-key-here
 fast_api_key_user=your-secure-user-key-here
 
-# External API (optional)
-EXTERNAL_API_URL=https://api.example.com
+# TF Shop WooCommerce API
+consumer_key=ck_your_woocommerce_consumer_key
+consumer_secret=cs_your_woocommerce_consumer_secret
+
+# NTNUI API
+devNTNUIApiKey=your-ntnui-api-key-here
 ```
 
 **Security Notes:**
@@ -131,7 +138,10 @@ All endpoints except `/health` and `/` require API key authentication via the `X
 #### Write Operations (Superuser API Key Only)
 - **POST** `/api/members/` - Create a new member
   - Query parameters: `name`, `email`, `telephone_number`, `tf_valid`, `tf_valid_until`, `ntnui_valid`, `ntnui_valid_until`
-- **POST** `/api/members/sync` - Sync members from external API or JSON data
+- **POST** `/api/members/sync/tfshop` - Sync members from TF Shop WooCommerce API
+- **POST** `/api/members/sync/ntnui` - Sync members from NTNUI API
+- **POST** `/api/members/sync/all` - Sync members from both APIs in parallel
+- **POST** `/api/members/sync` - Sync from provided JSON data (testing only)
   - Body: `{"tf_data": [...], "ntnui_data": [...]}`
 - **DELETE** `/api/members/reset` - Reset database (delete all members) ⚠️
 
@@ -197,7 +207,19 @@ curl -X DELETE -H "X-API-Key: your-superuser-key" http://localhost:8000/api/memb
 
 #### Sync members via API (requires superuser API key only)
 ```bash
-# PowerShell
+# Sync from TF Shop only
+curl -X POST "http://localhost:8000/api/members/sync/tfshop" \
+  -H "X-API-Key: your-superuser-key"
+
+# Sync from NTNUI only
+curl -X POST "http://localhost:8000/api/members/sync/ntnui" \
+  -H "X-API-Key: your-superuser-key"
+
+# Sync from both sources (recommended)
+curl -X POST "http://localhost:8000/api/members/sync/all" \
+  -H "X-API-Key: your-superuser-key"
+
+# Sync with test data (PowerShell)
 $headers = @{
     "X-API-Key" = "your-superuser-key"
     "Content-Type" = "application/json"
@@ -208,12 +230,6 @@ $body = @{
 } | ConvertTo-Json -Depth 10
 
 Invoke-WebRequest -Uri "http://localhost:8000/api/members/sync" -Method POST -Headers $headers -Body $body
-
-# Bash/curl (with files)
-curl -X POST "http://localhost:8000/api/members/sync" \
-  -H "X-API-Key: your-superuser-key" \
-  -H "Content-Type: application/json" \
-  -d "{\"tf_data\": $(cat tests/testdata/tf1.json), \"ntnui_data\": $(cat tests/testdata/ntnui1.json)}"
 ```
 
 ### Complete Test Workflow
@@ -251,87 +267,91 @@ Once the application is running:
 ## Project Components
 
 ### Models (`app/models/member.py`)
-- `Member` - SQLAlchemy ORM model for members table
-- `MemberSchema` - Schema class for member data
+- `Member` - SQLAlchemy ORM model (primary key: telephone_number with +47 prefix)
+- `MemberSchema` - Schema for member data validation
 
 ### Database (`app/db/database.py`)
-- Database engine configuration
-- Session management
-- `get_db()` dependency for FastAPI endpoints
+- PostgreSQL connection with SQLAlchemy
+- Session management with `get_db()` dependency
 
 ### Services (`app/services/`)
-- **sync_members.py** - Business logic for member operations
-- **external_apis.py** - HTTP client for external API integration
+- **sync_members.py** - Orchestrates member sync from multiple sources
+- **external_tfshopAPI.py** - WooCommerce API client with pagination
+  - Fetches orders, filters for membership products
+  - Normalizes Norwegian phone numbers to +47 format
+- **external_ntnuiAPI.py** - NTNUI API client with pagination
+  - Fetches memberships (phone numbers already have country code)
 
 ### API Routes (`app/api/membership.py`)
-- RESTful endpoints for member management
-- Dependency injection for database sessions
-- API key authentication for security
+- RESTful endpoints with async support
+- Dependency injection for database and security
+- Separate endpoints for each data source
 
 ### Security (`app/core/security.py`)
-- API key authentication system
-- Two-level access control (user and superuser)
-- Secure header-based authentication
+- Two-tier API key authentication (user/superuser)
+- Header-based authentication (`X-API-Key`)
 
 ## Deployment
 
 ### Environment Variables for Production
 
-When deploying to Render, GitHub Actions, or other platforms, set these environment variables:
-
 ```env
 DATABASE_URL=postgresql://user:password@host:5432/database
 fastapi_key_superuser=your-production-superuser-key
 fast_api_key_user=your-production-user-key
+consumer_key=ck_woocommerce_key
+consumer_secret=cs_woocommerce_secret
+devNTNUIApiKey=ntnui-api-key
 ```
 
 ### Render Deployment
 
 1. Create a new Web Service on Render
 2. Connect your GitHub repository
-3. Set environment variables in Render dashboard:
-   - `DATABASE_URL`
-   - `fastapi_key_superuser`
-   - `fast_api_key_user`
-4. Build command: `pip install -r app/requirements.txt`
-5. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+3. Set environment variables:
+   - `DATABASE_URL`, `fastapi_key_superuser`, `fast_api_key_user`
+   - `consumer_key`, `consumer_secret`, `devNTNUIApiKey`
+4. Build: `pip install -r app/requirements.txt`
+5. Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 ### GitHub Actions
 
-Update [.github/workflows/daily-sync.yml](.github/workflows/daily-sync.yml) with secrets:
+Add secrets in repository Settings → Secrets and variables → Actions:
+- `DATABASE_URL`
+- `FASTAPI_KEY_SUPERUSER`
+- `CONSUMER_KEY`, `CONSUMER_SECRET`
+- `DEVNTNUIAPIKEY`
 
-1. Go to GitHub repository Settings → Secrets and variables → Actions
-2. Add secrets:
-   - `DATABASE_URL`
-   - `FASTAPI_KEY_SUPERUSER`
-   - `TF_API_URL` (optional)
-   - `NTNUI_API_URL` (optional)
-
-Example workflow step with API key:
+Example workflow:
 ```yaml
-- name: Run sync via API
+- name: Sync members
   env:
     API_KEY: ${{ secrets.FASTAPI_KEY_SUPERUSER }}
   run: |
-    curl -X POST "https://your-api.com/api/members/sync" \
-      -H "X-API-Key: $API_KEY" \
-      -H "Content-Type: application/json" \
-      -d @sync_data.json
+    curl -X POST "https://your-api.com/api/members/sync/all" \
+      -H "X-API-Key: $API_KEY"
 ```
 
 ## Configuration
 
 ### Database
-Configure your PostgreSQL connection string in the `.env` file:
+PostgreSQL connection in `.env`:
 ```
 DATABASE_URL=postgresql://user:password@hostname:5432/database_name
 ```
 
-### External API
-Set the external API base URL in the `.env` file:
-```
-EXTERNAL_API_URL=https://api.example.com
-```
+### External APIs
+**TF Shop WooCommerce:**
+- `consumer_key` - WooCommerce REST API consumer key
+- `consumer_secret` - WooCommerce REST API consumer secret
+- Fetches orders from product ID 4223 (membership)
+- Filters orders containing "Medlemskap i NTNUI Topptur og Frikjøring"
+- Normalizes phone numbers to +47 format
+
+**NTNUI API:**
+- `devNTNUIApiKey` - NTNUI dev API key
+- Fetches memberships from `dev.api.ntnui.no/groups/esport/memberships/`
+- Phone numbers already include country code
 
 ## Development
 
@@ -414,22 +434,26 @@ Use the Swagger UI for interactive testing:
 
 ## Performance Considerations
 
-- Database queries use SQLAlchemy ORM with indexing on common columns
-- Async HTTP client for non-blocking external API calls
-- Connection pooling for database connections
+- Async/await for non-blocking API calls to TF Shop and NTNUI
+- Parallel data fetching with `asyncio.gather()`
+- Pagination for large datasets (100 items per page)
+- Phone number normalization for consistent matching
+- Database indexing on telephone_number (primary key)
+- SQLAlchemy connection pooling
 
 ## Future Enhancements
 
 - [x] API key authentication and authorization
+- [x] Separate sync endpoints per data source
+- [x] Async parallel API calls
+- [x] Phone number normalization
 - [ ] Rate limiting
 - [ ] Pagination for member lists
-- [ ] Advanced filtering and search
+- [ ] Caching for external API responses
 - [ ] Member activity tracking
-- [ ] Bulk member import/export
 - [ ] Email notifications
-- [ ] Member reporting
 - [ ] API key rotation mechanism
-- [ ] Audit logging for API access
+- [ ] Audit logging
 
 ## License
 
