@@ -33,11 +33,7 @@ def normalize_phone_number(phone: str) -> str:
     # If number starts with 00 (international format), keep as is
     elif normalized.startswith('00'):
         normalized = normalized[2:]  # Remove 00, keep country code
-    
-    # If number starts with 0 (common Norwegian format), remove 0 and add 47
-    elif normalized.startswith('0') and len(normalized) == 9:
-        normalized = '47' + normalized[1:]
-    
+        
     # If number is 8 digits and looks Norwegian, add 47
     elif len(normalized) == 8 and normalized[0] in '456789':
         normalized = '47' + normalized

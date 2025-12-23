@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.member import Member
 from app.services.sync_members import MemberSyncService
-from app.services.external_tfshopAPI import TFShopAPIClient
-from app.services.external_ntnuiAPI import NTNUIAPIClient
 from app.core.security import require_superuser, require_user_or_superuser
 from typing import List, Dict
 
@@ -64,19 +62,13 @@ async def sync_tfshop_members(
 ):
     """
     Fetch and sync members from TF Shop WooCommerce API (requires superuser API key)
+    
+    Only updates TF fields (tf_valid, tf_valid_until) - preserves existing NTNUI data!
     """
     try:
-        tf_client = TFShopAPIClient()
-        tf_members = await tf_client.get_members()
-        
         service = MemberSyncService(db)
-        result = await service.sync_members_from_external(tf_data=tf_members, ntnui_data=[])
-        
-        return {
-            **result,
-            "source": "tfshop",
-            "fetched_count": len(tf_members)
-        }
+        result = await service.sync_from_tfshop()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing TF Shop members: {str(e)}")
 
@@ -88,19 +80,14 @@ async def sync_ntnui_members(
 ):
     """
     Fetch and sync members from NTNUI API (requires superuser API key)
+    
+    Only updates NTNUI fields (ntnui_valid, ntnui_valid_until) - preserves existing TF data!
+    NTNUI name/email has priority over TF Shop data.
     """
     try:
-        ntnui_client = NTNUIAPIClient()
-        ntnui_members = await ntnui_client.get_members()
-        
         service = MemberSyncService(db)
-        result = await service.sync_members_from_external(tf_data=[], ntnui_data=ntnui_members)
-        
-        return {
-            **result,
-            "source": "ntnui",
-            "fetched_count": len(ntnui_members)
-        }
+        result = await service.sync_from_ntnui()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing NTNUI members: {str(e)}")
 
@@ -112,22 +99,19 @@ async def sync_all_members(
 ):
     """
     Fetch and sync members from both TF Shop and NTNUI APIs (requires superuser API key)
-    Fetches data from both sources in parallel for optimal performance
+    Fetches data from both sources in parallel, merges by phone number.
+    NTNUI has priority for name/email.
     """
     try:
         service = MemberSyncService(db)
-        result = await service.sync_members_from_external()
-        
-        return {
-            **result,
-            "source": "all"
-        }
+        result = await service.sync_all()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing all members: {str(e)}")
 
 
 @router.post("/sync")
-async def sync_members(
+async def sync_members_test(
     tf_data: List[Dict] = Body(None),
     ntnui_data: List[Dict] = Body(None),
     db: Session = Depends(get_db),
@@ -142,7 +126,7 @@ async def sync_members(
     - ntnui_data: List of NTNUI member data (optional)
     """
     service = MemberSyncService(db)
-    result = await service.sync_members_from_external(tf_data=tf_data, ntnui_data=ntnui_data)
+    result = await service.sync_all()
     return result
 
 

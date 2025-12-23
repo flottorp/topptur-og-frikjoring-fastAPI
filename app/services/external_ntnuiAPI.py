@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class NTNUIAPIClient:
     """Client for fetching data from NTNUI API"""
     
-    def __init__(self, api_key: str = None, group_slug: str = 'esport'):
-        self.api_key = api_key or os.getenv('devNTNUIApiKey')
-        self.base_url = 'https://dev.api.ntnui.no'
+    def __init__(self, api_key: str = None, group_slug: str = 'topptur-og-frikjoring'):
+        self.api_key = api_key or os.getenv('tfNtnuiApiKey')
+        self.base_url = 'https://api.ntnui.no'
         self.group_slug = group_slug
         
         if not self.api_key:
@@ -40,11 +40,11 @@ class NTNUIAPIClient:
         
         all_memberships = []
         page = 1
-        per_page = 100  # Adjust based on NTNUI API limits
+        per_page = 500  # Safe page size for ~1600 members
         
-        logger.info(f"Fetching memberships from NTNUI API (group: {self.group_slug})...")
+        logger.info(f"🔄 Fetching fresh data from NTNUI API (group: {self.group_slug})...")
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             while True:
                 try:
                     url = f"{self.base_url}/groups/{self.group_slug}/memberships/"
@@ -63,7 +63,7 @@ class NTNUIAPIClient:
                         memberships = data.get('results', [])
                         all_memberships.extend(memberships)
                         
-                        logger.info(f"Fetched page {page}: {len(memberships)} memberships (total: {len(all_memberships)})")
+                        logger.info(f"  📄 Page {page}: {len(memberships)} memberships (total: {len(all_memberships)})")
                         
                         # Check if there are more pages
                         if not data.get('next'):
@@ -74,20 +74,20 @@ class NTNUIAPIClient:
                         # Non-paginated response
                         if isinstance(data, list):
                             all_memberships.extend(data)
-                            logger.info(f"Fetched {len(data)} memberships (non-paginated)")
+                            logger.info(f"  📄 Fetched {len(data)} memberships (non-paginated)")
                         break
                     
                 except httpx.HTTPStatusError as e:
-                    logger.error(f"HTTP error fetching memberships (page {page}): {e}")
+                    logger.error(f"❌ HTTP error fetching memberships (page {page}): {e}")
                     break
                 except httpx.RequestError as e:
-                    logger.error(f"Request error fetching memberships (page {page}): {e}")
+                    logger.error(f"❌ Request error fetching memberships (page {page}): {e}")
                     break
                 except Exception as e:
-                    logger.error(f"Unexpected error fetching memberships (page {page}): {e}")
+                    logger.error(f"❌ Unexpected error fetching memberships (page {page}): {e}")
                     break
         
-        logger.info(f"NTNUI fetch complete: {len(all_memberships)} total memberships")
+        logger.info(f"✅ NTNUI fetch complete: {len(all_memberships)} total memberships")
         return all_memberships
     
     def normalize_memberships_to_members(self, memberships: List[Dict]) -> List[Dict]:
@@ -128,7 +128,7 @@ class NTNUIAPIClient:
             
             members.append(member)
         
-        logger.info(f"Normalized {len(members)} NTNUI members")
+        logger.info(f"✅ Normalized {len(members)} NTNUI members")
         return members
     
     async def get_members(self) -> List[Dict]:
