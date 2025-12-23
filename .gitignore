@@ -2,3 +2,5 @@
 .env
 exampledata.csv
 daily-sync.yaml
+tfapiexempeldata.json
+ntnuiexempeldata.json
