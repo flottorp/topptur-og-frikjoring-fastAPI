@@ -2,6 +2,12 @@
 
 A FastAPI application for managing members and synchronizing member data from external sources for the Topptur og Frikjøring system.
 
+## Live API
+
+The API is deployed on Render and can be accessed at:
+- **API Documentation (Swagger UI):** https://topptur-og-frikjoring-fastapi.onrender.com/docs
+- **Alternative Documentation (ReDoc):** https://topptur-og-frikjoring-fastapi.onrender.com/redoc
+
 ## Project Structure
 
 ```
