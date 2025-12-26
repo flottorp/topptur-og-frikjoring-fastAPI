@@ -1,0 +1,51 @@
+name: Daily Health Check
+
+on:
+  schedule:
+    # 00:50 UTC => 01:50 CET / 02:50 CEST (10 minutes before the 01:00 UTC sync)
+    - cron: '50 0 * * *'
+  # Allow manual runs from the GitHub UI
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Call /health endpoint
+        env:
+          HEALTH_URL: https://topptur-og-frikjoring-fastapi.onrender.com/health
+        run: |
+          echo "Starting daily health check..."
+
+          attempts=0
+          max_attempts=3
+          sleep_seconds=10
+
+          while [ $attempts -lt $max_attempts ]; do
+            attempts=$((attempts + 1))
+            echo "Attempt $attempts of $max_attempts..."
+
+            http_code=$(curl -sS -o response.json -w "%{http_code}" "$HEALTH_URL" \
+              -H "accept: application/json" || echo "000")
+
+            echo "HTTP status: $http_code"
+            echo "Response body:"
+            cat response.json || echo "<no body>"
+
+            # Success (2xx)
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              echo "Health check OK."
+              exit 0
+            fi
+
+            # Retry on 5xx
+            if [ "$http_code" -ge 500 ] && [ "$attempts" -lt "$max_attempts" ]; then
+              echo "Server error ($http_code). Retrying in $sleep_seconds seconds..."
+              sleep "$sleep_seconds"
+            else
+              echo "Non-retriable error or max attempts reached. Failing job."
+              exit 1
+            fi
+          done

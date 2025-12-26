@@ -10,28 +10,53 @@ on:
 jobs:
   trigger-sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Call /api/members/sync/all
         env:
           API_URL: https://topptur-og-frikjoring-fastapi.onrender.com/api/members/sync/all
-          # Set this secret in GitHub: Settings → Secrets and variables → Actions
-          # Name: FASTAPI_SUPERUSER_API_KEY, Value: your superuser API key
+          # GitHub secret containing the superuser API key
+          # Settings → Secrets and variables → Actions → New repository secret
+          # Name: fastapi_key_superuser
           API_KEY: ${{ secrets.fastapi_key_superuser }}
         run: |
           echo "Starting daily member sync..."
 
-          # Call the API and capture JSON response; --fail makes curl exit on HTTP errors
-          response=$(curl -sS -X POST "$API_URL" \
-            -H "accept: application/json" \
-            -H "X-API-Key: $API_KEY" \
-            -d '' \
-            --fail)
+          attempts=0
+          max_attempts=3
+          sleep_seconds=10
 
-          echo "Sync completed. Response JSON:"
-          echo "$response"
+          while [ $attempts -lt $max_attempts ]; do
+            attempts=$((attempts + 1))
+            echo "Attempt $attempts of $max_attempts..."
+
+            http_code=$(curl -sS -o response.json -w "%{http_code}" -X POST "$API_URL" \
+              -H "accept: application/json" \
+              -H "X-API-Key: $API_KEY" \
+              -d '' || echo "000")
+
+            echo "HTTP status: $http_code"
+            echo "Response body:"
+            cat response.json || echo "<no body>"
+
+            # Success (2xx)
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              echo "Sync completed successfully."
+              exit 0
+            fi
+
+            # Retry on 5xx (including 502)
+            if [ "$http_code" -ge 500 ] && [ "$attempts" -lt "$max_attempts" ]; then
+              echo "Server error ($http_code). Retrying in $sleep_seconds seconds..."
+              sleep "$sleep_seconds"
+            else
+              echo "Non-retriable error or max attempts reached. Failing job."
+              exit 1
+            fi
+          done
 
       - name: Log failure
         if: failure()
         run: |
-          echo "Daily member sync failed. Check workflow logs for details."
+          echo "Daily member sync failed. Check workflow logs for HTTP status and response JSON."
