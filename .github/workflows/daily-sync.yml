@@ -2,57 +2,36 @@ name: Daily Member Sync
 
 on:
   schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
-  workflow_dispatch:  # Allow manual trigger
+    # 01:00 UTC => 02:00 CET / 03:00 CEST (Europe/Oslo)
+    - cron: '0 1 * * *'
+  # Allow manual runs from the GitHub UI
+  workflow_dispatch:
 
 jobs:
-  sync:
+  trigger-sync:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r app/requirements.txt
-      
-      - name: Fetch TF data
-        id: fetch-tf
-        run: |
-          # TODO: Replace with actual API endpoint
-          # curl -H "Authorization: Bearer ${{ secrets.TF_API_KEY }}" \
-          #      https://api.tf.example.com/members > tf_data.json
-          
-          # For now, use test data
-          cp tests/testdata/tf1.json tf_data.json
-      
-      - name: Fetch NTNUI data
-        id: fetch-ntnui
-        run: |
-          # TODO: Replace with actual API endpoint
-          # curl -H "Authorization: Bearer ${{ secrets.NTNUI_API_KEY }}" \
-          #      https://api.ntnui.example.com/members > ntnui_data.json
-          
-          # For now, use test data
-          cp tests/testdata/ntnui1.json ntnui_data.json
-      
-      - name: Run sync
+      - name: Call /api/members/sync/all
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          FASTAPI_KEY_SUPERUSER: ${{ secrets.FASTAPI_KEY_SUPERUSER }}
+          API_URL: https://topptur-og-frikjoring-fastapi.onrender.com/api/members/sync/all
+          # Set this secret in GitHub: Settings → Secrets and variables → Actions
+          # Name: FASTAPI_SUPERUSER_API_KEY, Value: your superuser API key
+          API_KEY: ${{ secrets.fastapi_key_superuser }}
         run: |
-          python sync_cli.py --tf tf_data.json --ntnui ntnui_data.json
-      
-      - name: Notify on failure
+          echo "Starting daily member sync..."
+
+          # Call the API and capture JSON response; --fail makes curl exit on HTTP errors
+          response=$(curl -sS -X POST "$API_URL" \
+            -H "accept: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d '' \
+            --fail)
+
+          echo "Sync completed. Response JSON:"
+          echo "$response"
+
+      - name: Log failure
         if: failure()
         run: |
-          echo "Sync failed! Check logs for details."
-          # TODO: Add notification (email, Slack, etc.)
+          echo "Daily member sync failed. Check workflow logs for details."
