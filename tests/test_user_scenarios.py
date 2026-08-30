@@ -39,6 +39,26 @@ class TestReadOnlyUser:
         # 200 if exists, 404 if not found - both are valid responses
         assert response.status_code in [200, 404]
     
+    def test_readonly_user_can_search_by_name(self):
+        """Read-only user can search members by partial name"""
+        response = client.get("/api/members/search", params={"q": "ol"}, headers=self.headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert "members" in body
+        assert body["count"] == len(body["members"])
+    
+    def test_readonly_user_can_search_by_phone_digits(self):
+        """Read-only user can search members by partial phone number"""
+        response = client.get("/api/members/search", params={"q": "9111"}, headers=self.headers)
+        assert response.status_code == 200
+        assert "members" in response.json()
+    
+    def test_search_requires_at_least_two_characters(self):
+        """Searching with a single character returns no results"""
+        response = client.get("/api/members/search", params={"q": "o"}, headers=self.headers)
+        assert response.status_code == 200
+        assert response.json()["count"] == 0
+    
     def test_readonly_user_cannot_create_member(self):
         """Read-only user cannot create new members"""
         response = client.post(

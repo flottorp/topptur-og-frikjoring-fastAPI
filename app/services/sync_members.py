@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.models.member import Member
 from app.services.external_tfshopAPI import TFShopAPIClient
@@ -263,6 +264,36 @@ class MemberSyncService:
     def get_member_by_id(self, telephone_number: str):
         """Get a specific member by telephone number (primary key)"""
         return self.db.query(Member).filter(Member.telephone_number == telephone_number).first()
+    
+    def search_members(self, query: str, limit: int = 20) -> List[Member]:
+        """
+        Search members by partial name or telephone number (case-insensitive).
+        Returns an empty list for queries shorter than 2 characters.
+        """
+        query = (query or "").strip()
+        if len(query) < 2:
+            return []
+        
+        # Escape LIKE wildcards so they are matched literally
+        escaped = (
+            query.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        conditions = [Member.name.ilike(f"%{escaped}%", escape="\\")]
+        
+        # Phone numbers are stored as +47XXXXXXXX, so match on digits only
+        digits = "".join(c for c in query if c.isdigit())
+        if digits:
+            conditions.append(Member.telephone_number.ilike(f"%{digits}%"))
+        
+        return (
+            self.db.query(Member)
+            .filter(or_(*conditions))
+            .order_by(Member.name)
+            .limit(limit)
+            .all()
+        )
     
     def create_member(self, name: str, email: str, telephone_number: str = None, tf_valid: bool = False, tf_valid_until: date = None, ntnui_valid: bool = False, ntnui_valid_until: date = None) -> Member:
         """Create a new member"""

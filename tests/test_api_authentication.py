@@ -44,6 +44,12 @@ class TestMissingAPIKey:
         assert response.status_code == 401
         assert "Missing API Key" in response.json()["detail"]
     
+    def test_search_members_no_key(self):
+        """GET /api/members/search should fail without API key"""
+        response = client.get("/api/members/search", params={"q": "ola"})
+        assert response.status_code == 401
+        assert "Missing API Key" in response.json()["detail"]
+    
     def test_get_member_by_id_no_key(self):
         """GET /api/members/{id} should fail without API key"""
         response = client.get("/api/members/+4712345678")
