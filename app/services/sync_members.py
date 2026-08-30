@@ -93,15 +93,15 @@ class MemberSyncService:
             
             created_count = 0
             updated_count = 0
-            today = date.today()
             
             for entry in ntnui_data:
                 phone = entry.get('phone')
                 if not phone:
                     continue
                 
+                # Validity comes from the group membership flag, not from a date
                 ntnui_valid_until = entry.get('ntnui_valid_until')
-                ntnui_valid = ntnui_valid_until >= today if ntnui_valid_until else False
+                ntnui_valid = bool(entry.get('ntnui_valid'))
                 
                 existing = self.get_member_by_id(phone)
                 
@@ -179,6 +179,7 @@ class MemberSyncService:
                         'last_name': entry.get('last_name', ''),
                         'email': entry.get('email', ''),
                         'tf_valid_until': entry.get('tf_valid_until'),
+                        'ntnui_valid': False,
                         'ntnui_valid_until': None
                     }
             
@@ -187,6 +188,7 @@ class MemberSyncService:
                 if not phone:
                     continue
                 if phone in members_dict:
+                    members_dict[phone]['ntnui_valid'] = bool(entry.get('ntnui_valid'))
                     members_dict[phone]['ntnui_valid_until'] = entry.get('ntnui_valid_until')
                     # NTNUI priority for name/email
                     if entry.get('first_name'):
@@ -201,6 +203,7 @@ class MemberSyncService:
                         'last_name': entry.get('last_name', ''),
                         'email': entry.get('email', ''),
                         'tf_valid_until': None,
+                        'ntnui_valid': bool(entry.get('ntnui_valid')),
                         'ntnui_valid_until': entry.get('ntnui_valid_until')
                     }
             
@@ -213,7 +216,7 @@ class MemberSyncService:
                 tf_valid_until = data['tf_valid_until']
                 ntnui_valid_until = data['ntnui_valid_until']
                 tf_valid = tf_valid_until >= today if tf_valid_until else False
-                ntnui_valid = ntnui_valid_until >= today if ntnui_valid_until else False
+                ntnui_valid = data['ntnui_valid']
                 name = f"{data['first_name']} {data['last_name']}".strip()
                 
                 existing = self.get_member_by_id(phone)

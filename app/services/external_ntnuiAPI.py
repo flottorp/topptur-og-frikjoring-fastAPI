@@ -6,7 +6,7 @@ import httpx
 import logging
 import os
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,32 @@ class NTNUIAPIClient:
         logger.info(f"✅ NTNUI fetch complete: {len(all_memberships)} total memberships")
         return all_memberships
     
+    @staticmethod
+    def _parse_group_membership_flag(value) -> bool:
+        """
+        Read has_valid_group_membership defensively.
+
+        The live API sends a JSON boolean, but NTNUI's own OpenAPI schema types
+        this field as a string (the default for an untyped SerializerMethodField).
+        A plain bool() would turn the string "False" into True and mark every
+        member as valid, so only accept values we actually recognise.
+        """
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ('true', '1', 'yes'):
+                return True
+            if normalized in ('false', '0', 'no', ''):
+                return False
+        if value is None:
+            return False
+        logger.warning(
+            f"Unexpected has_valid_group_membership value {value!r} "
+            f"({type(value).__name__}) - treating as not valid"
+        )
+        return False
+
     def normalize_memberships_to_members(self, memberships: List[Dict]) -> List[Dict]:
         """
         Convert raw NTNUI memberships to normalized member format
@@ -98,6 +124,8 @@ class NTNUIAPIClient:
             List of normalized member dictionaries
         """
         members = []
+        today = date.today()
+        contract_valid_count = 0
         
         for membership in memberships:
             phone = membership.get('phone_number', '')
@@ -108,27 +136,45 @@ class NTNUIAPIClient:
             # NTNUI API already uses phone numbers with land code
             # No normalization needed as per user requirement
             
-            # Parse expiry date
-            ntnui_valid_until = None
-            expiry_date = membership.get('ntnui_contract_expiry_date') or membership.get('end_date')
+            # The endpoint lists everyone who has ever joined the group, so
+            # membership validity comes from has_valid_group_membership - NOT
+            # from ntnui_contract_expiry_date, which is the separate
+            # NTNUI-wide contract and can be expired while the group
+            # membership is perfectly valid.
+            ntnui_valid = self._parse_group_membership_flag(
+                membership.get('has_valid_group_membership')
+            )
             
-            if expiry_date:
+            # Group membership follows the calendar year, which is what
+            # medlem.ntnui.no shows ("gyldig til 31. des").
+            ntnui_valid_until = date(today.year, 12, 31) if ntnui_valid else None
+            
+            # Only for the log line below, so the gap stays visible
+            contract_expiry = membership.get('ntnui_contract_expiry_date')
+            if contract_expiry:
                 try:
-                    ntnui_valid_until = datetime.strptime(expiry_date, '%Y-%m-%d').date()
+                    if datetime.strptime(contract_expiry, '%Y-%m-%d').date() >= today:
+                        contract_valid_count += 1
                 except Exception as e:
-                    logger.warning(f"Could not parse expiry date '{expiry_date}': {e}")
+                    logger.warning(f"Could not parse expiry date '{contract_expiry}': {e}")
             
             member = {
                 'phone': phone,  # Already has land code
                 'first_name': membership.get('first_name', ''),
                 'last_name': membership.get('last_name', ''),
                 'email': membership.get('email', ''),
+                'ntnui_valid': ntnui_valid,
                 'ntnui_valid_until': ntnui_valid_until
             }
             
             members.append(member)
         
-        logger.info(f"✅ Normalized {len(members)} NTNUI members")
+        valid_count = sum(1 for m in members if m['ntnui_valid'])
+        logger.info(
+            f"✅ Normalized {len(members)} NTNUI members: "
+            f"{valid_count} with a valid group membership "
+            f"({contract_valid_count} with a valid NTNUI contract date)"
+        )
         return members
     
     async def get_members(self) -> List[Dict]:
