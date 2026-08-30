@@ -16,7 +16,7 @@ from datetime import date
 
 from app.services.external_ntnuiAPI import NTNUIAPIClient
 from app.services.sync_members import MemberSyncService
-from app.models.member import Base, Member
+from app.models.member import Base
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -75,6 +75,26 @@ class TestNormalization:
             [_membership("+4791110005", True, "ikke-en-dato")]
         )
         assert out[0]["ntnui_valid"] is True
+
+    def test_string_false_is_not_valid(self):
+        """NTNUI's schema types the flag as a string; bool("False") would be True"""
+        out = self.client.normalize_memberships_to_members(
+            [_membership("+4791110006", "False", "2020-01-01")]
+        )
+        assert out[0]["ntnui_valid"] is False
+        assert out[0]["ntnui_valid_until"] is None
+
+    def test_string_true_is_valid(self):
+        out = self.client.normalize_memberships_to_members(
+            [_membership("+4791110007", "True", "2020-01-01")]
+        )
+        assert out[0]["ntnui_valid"] is True
+
+    def test_unrecognised_flag_value_is_not_valid(self):
+        out = self.client.normalize_memberships_to_members(
+            [_membership("+4791110008", 42, "2020-01-01")]
+        )
+        assert out[0]["ntnui_valid"] is False
 
     def test_rows_without_phone_are_skipped(self):
         out = self.client.normalize_memberships_to_members(

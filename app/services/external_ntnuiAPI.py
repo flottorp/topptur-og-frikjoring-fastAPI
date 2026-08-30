@@ -90,6 +90,32 @@ class NTNUIAPIClient:
         logger.info(f"✅ NTNUI fetch complete: {len(all_memberships)} total memberships")
         return all_memberships
     
+    @staticmethod
+    def _parse_group_membership_flag(value) -> bool:
+        """
+        Read has_valid_group_membership defensively.
+
+        The live API sends a JSON boolean, but NTNUI's own OpenAPI schema types
+        this field as a string (the default for an untyped SerializerMethodField).
+        A plain bool() would turn the string "False" into True and mark every
+        member as valid, so only accept values we actually recognise.
+        """
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ('true', '1', 'yes'):
+                return True
+            if normalized in ('false', '0', 'no', ''):
+                return False
+        if value is None:
+            return False
+        logger.warning(
+            f"Unexpected has_valid_group_membership value {value!r} "
+            f"({type(value).__name__}) - treating as not valid"
+        )
+        return False
+
     def normalize_memberships_to_members(self, memberships: List[Dict]) -> List[Dict]:
         """
         Convert raw NTNUI memberships to normalized member format
@@ -115,7 +141,9 @@ class NTNUIAPIClient:
             # from ntnui_contract_expiry_date, which is the separate
             # NTNUI-wide contract and can be expired while the group
             # membership is perfectly valid.
-            ntnui_valid = bool(membership.get('has_valid_group_membership'))
+            ntnui_valid = self._parse_group_membership_flag(
+                membership.get('has_valid_group_membership')
+            )
             
             # Group membership follows the calendar year, which is what
             # medlem.ntnui.no shows ("gyldig til 31. des").
