@@ -20,6 +20,23 @@ def get_all_members(
     return {"members": members, "count": len(members)}
 
 
+@router.get("/search")
+def search_members(
+    q: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    api_key: str = Security(require_user_or_superuser)
+):
+    """
+    Search for members by partial name or telephone number (requires API key)
+    
+    Queries shorter than 2 characters return no results.
+    """
+    service = MemberSyncService(db)
+    members = service.search_members(q, limit=limit)
+    return {"members": members, "count": len(members)}
+
+
 @router.get("/{telephone_number}")
 def get_member(
     telephone_number: str,
